@@ -16,6 +16,7 @@ This project uses `yfinance` to collect required data for all S&P 500 stocks. Th
 | Dividends | Numeric |
 | Stock Splits | Numeric |
 | Ticker | String |
+
 Note:
 * This is only original data dimension and does not include any feature engineering,
 * This only covers price and volume which should be enough for the initial iterations of machine learning and deep learning but may be extended to cover fundamental data for future advanced iterations.
