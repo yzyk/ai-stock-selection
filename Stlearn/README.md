@@ -12,7 +12,7 @@ To achieve this, I select [Abstract Factory Pattern](https://www.oodesign.com/ab
 
 Based on general ideas of Abstract Factory Pattern, we design the framework and modules of Stlearn as follow:
 
-<img src="./img/framework.png" alt="framework" title="framework" width="4000" height="500"/>
+<img src="./img/stframework.png" alt="framework" title="framework" width="4000" height="500"/>
 
 In this framework, the client system is expected to use `Data` and `Model` objects and all their derived classes objects as their products to perform machine learning task. The rule of abstract factory discourages the client to directly call constructor of these objects to access specific product objects, because clients are expected not to know anything about how to construct or implement a specific product, and because how to construct and implement a specific product may change from time to time. Instead, the client is expected to go to `StlearnFactory` and all its derived classes to access specific product through unified and constant APIs.
 
