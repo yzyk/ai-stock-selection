@@ -1,6 +1,10 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+
+import IPython
+
+import matplotlib.pyplot as plt
 from Data import *
 import numpy as np
 import pandas as pd
@@ -36,6 +40,10 @@ class Model(ABC):
     def evaluate(self, data) -> None:
         pass
 
+    @abstractmethod
+    def info(self) -> None:
+        pass
+
 
 class MlModel(Model):
 
@@ -56,6 +64,10 @@ class MlModel(Model):
         X_test, y_test = data.get_test()
         y_pred = self.predict(X_test)
         performance_measure(y_test, y_pred)
+        pass
+
+    def info(self):
+        print(self._model)
         pass
 
 
@@ -80,6 +92,8 @@ class DlModel(Model):
                                    epochs=max_epochs,
                                    validation_data=(X_val, y_val)
                                    )
+        fig, axs = plt.subplots(1, 2, figsize=(24, 10))
+        self._plot_train(history=history_, axs=axs)
         pass
 
     def evaluate(self, data) -> None:
@@ -88,6 +102,32 @@ class DlModel(Model):
         print("{n:s}: Test loss: {l:3.5f}".format(
             n=self._name, l=score_[0])
         )
+        pass
+
+    def info(self):
+        tf.keras.utils.plot_model(
+            self._model, to_file=MODEL_IMAGE_PATH + '/' + self._name + '.png', show_shapes=True, dpi=100
+        )
+        print("Parameters number in model: ", self._model.count_params())
+        return IPython.display.Image(MODEL_IMAGE_PATH + '/' + self._name + '.png')
+
+    def _plot_train(self, history, axs):
+        # Determine the name of the key that indexes into the accuracy metric
+        acc_string = 'weighted_' + ERROR
+        # Plot loss
+        axs[0].plot(history.history['loss'])
+        axs[0].plot(history.history['val_loss'])
+        axs[0].set_title(self._name + " " + 'model loss')
+        axs[0].set_ylabel('loss')
+        axs[0].set_xlabel('epoch')
+        axs[0].legend(['train', 'validation'], loc='upper left')
+        # Plot accuracy
+        axs[1].plot(history.history[acc_string])
+        axs[1].plot(history.history['val_' + acc_string])
+        axs[1].set_title(self._name + ' ' + acc_string)
+        axs[1].set_ylabel(acc_string)
+        axs[1].set_xlabel('epoch')
+        axs[1].legend(['train', 'validation'], loc='upper left')
         pass
 
 
@@ -121,6 +161,7 @@ class SimpleNNModel(DlModel):
             tf.keras.layers.Dropout(0.1),
             tf.keras.layers.Dense(1, name='dense_head')
         ])
+
     pass
 
 
