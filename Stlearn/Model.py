@@ -37,7 +37,7 @@ class Model(ABC):
         return self._model.predict(X)
 
     @abstractmethod
-    def evaluate(self, data) -> None:
+    def evaluate(self, data, s) -> None:
         pass
 
     @abstractmethod
@@ -60,8 +60,13 @@ class MlModel(Model):
         self._model.fit(X_train, y_train)
         pass
 
-    def evaluate(self, data) -> None:
-        X_test, y_test = data.get_test()
+    def evaluate(self, data, s) -> None:
+        X_test = None
+        y_test = None
+        if s == 'val':
+            X_test, y_test = data.get_val()
+        if s == 'test':
+            X_test, y_test = data.get_test()
         y_pred = self.predict(X_test)
         performance_measure(y_test, y_pred)
         pass
@@ -96,8 +101,13 @@ class DlModel(Model):
         self._plot_train(history=history_, axs=axs)
         pass
 
-    def evaluate(self, data) -> None:
-        X_test, y_test = data.get_test()
+    def evaluate(self, data, s) -> None:
+        X_test = None
+        y_test = None
+        if s == 'val':
+            X_test, y_test = data.get_val()
+        if s == 'test':
+            X_test, y_test = data.get_test()
         score_ = self._model.evaluate(X_test, y_test)
         print("{n:s}: Test loss: {l:3.5f}".format(
             n=self._name, l=score_[0])
@@ -181,7 +191,10 @@ class CNNModel(DlModel):
             tf.keras.layers.MaxPooling1D(pool_size=(2,)),
             tf.keras.layers.Flatten(),
             tf.keras.layers.Dropout(0.5),
-            tf.keras.layers.Dense(1, name='dense_head')
+            tf.keras.layers.Dense(30,
+                                  kernel_initializer=tf.initializers.zeros()),
+            # Shape => [batch, out_steps, features].
+            tf.keras.layers.Reshape([30, 1])
         ])
         pass
 
@@ -191,7 +204,8 @@ class LSTMModel(DlModel):
     def _create_model(self):
         self._model = tf.keras.Sequential([
             tf.keras.layers.LSTM(16, return_sequences=True, input_shape=self._input_shape),
-            tf.keras.layers.Flatten(),
-            tf.keras.layers.Dense(1, name='dense_head')
+            #tf.keras.layers.Flatten(),
+            tf.keras.layers.LSTM(1, return_sequences=True)
+            #tf.keras.layers.Dense(1, name='dense_head')
         ])
         pass

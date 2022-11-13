@@ -3,6 +3,8 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 import numpy as np
 import pandas as pd
+from sklearn.preprocessing import StandardScaler
+from sklearn.pipeline import Pipeline
 import tensorflow as tf
 from utils import *
 
@@ -64,13 +66,15 @@ class Data(ABC):
         print("y_test shape: " + str(self._y_test.shape))
 
     def _define_transformer(self):
-        self._transformer = None
+        self._transformer = Pipeline(steps=[
+            ('scaler', StandardScaler())
+        ])
         pass
 
     def _generate_data(self, train_start, val_start, test_start, test_end, three_d=False) -> None:
         self._data = pd.read_parquet(DATA_PATH)
         self._data = self._data[(self._data['Date'] >= train_start) &
-                                (self._data['Date'] <= test_end)].reset_index().drop('index', axis=1)
+                                (self._data['Date'] < test_end)].reset_index().drop('index', axis=1)
 
         d = self._data[['Ticker']].reset_index()
         lows = d.groupby(['Ticker'])['index'].min().rename('low')
@@ -86,16 +90,6 @@ class Data(ABC):
         test_indexes = self._data[(self._data['Date'] >= test_start) &
                                   (self._data['Date'] < test_end)].index
 
-        '''
-        self._data_train = self._data.loc[train_indexes, :].reset_index().drop('index', axis=1).reset_index()
-        self._data_val = self._data.loc[val_indexes, :].reset_index().drop('index', axis=1).reset_index()
-        self._data_test = self._data.loc[test_indexes, :].reset_index().drop('index', axis=1).reset_index()
-
-        self._first_indexes_train = self._data_train.groupby(['Ticker'])['index'].min().values
-        self._first_indexes_val = self._data_val.groupby(['Ticker'])['index'].min().values
-        self._first_indexes_test = self._data_test.groupby(['Ticker'])['index'].min().values
-        '''
-
         str_features = ['Date', 'Ticker']
         ids_features = ['Date', 'Ticker', 'Close', 'return', 'market return']
 
@@ -103,18 +97,18 @@ class Data(ABC):
         self._data_val = self._data.loc[val_indexes, :].reset_index().drop('index', axis=1)
         self._data_test = self._data.loc[test_indexes, :].reset_index().drop('index', axis=1)
 
-        '''
-        self._data = self._data.drop(str_features, axis=1)
-        self._data_train = self._data_train.drop(str_features, axis=1)
-        self._data_val = self._data_val.drop(str_features, axis=1)
-        self._data_test = self._data_test.drop(str_features, axis=1)
-        '''
-
         self._X = self._data.drop(['er'] + str_features, axis=1).values
         self._y = self._data['er'].values
         self._ids = self._data[ids_features].values
 
         if three_d:
+
+            if self._transformer is not None:
+                self._transformer.fit(self._X[train_indexes])
+                self._X[train_indexes] = self._transformer.transform(self._X[train_indexes])
+                self._X[val_indexes] = self._transformer.transform(self._X[val_indexes])
+                self._X[test_indexes] = self._transformer.transform(self._X[test_indexes])
+
             self._generate_data_window(self._X, self._y, self._ids, self._first_indexes,
                                        train_indexes, val_indexes, test_indexes)
 
@@ -143,6 +137,15 @@ class Data(ABC):
                               train_indexes, val_indexes, test_indexes):
 
         data_window_size = self._data_window_size
+
+        if len(train_indexes) - data_window_size <= 0:
+            raise ValueError("Do not have enough training samples!")
+
+        if len(train_indexes) - data_window_size < len(val_indexes):
+            raise ValueError("Fewer training samples than validation samples!")
+
+        if len(train_indexes) - data_window_size < len(test_indexes):
+            raise ValueError("Fewer training samples than test samples!")
 
         num_samples = X.shape[0] - data_window_size + 1
         start_index = data_window_size - 1
@@ -196,6 +199,42 @@ class Data(ABC):
         self._ids_test = ids_test
 
         pass
+
+    @property
+    def X_train(self):
+        return self._X_train
+
+    @property
+    def X_val(self):
+        return self._X_val
+
+    @property
+    def X_test(self):
+        return self._X_test
+
+    @property
+    def y_train(self):
+        return self._y_train
+
+    @property
+    def y_val(self):
+        return self._y_val
+
+    @property
+    def y_test(self):
+        return self._y_test
+
+    @property
+    def ids_train(self):
+        return self._ids_train
+
+    @property
+    def ids_val(self):
+        return self._ids_val
+
+    @property
+    def ids_test(self):
+        return self._ids_test
 
 
 class MlData(Data):
