@@ -59,7 +59,7 @@ We currently encapsulated some well-known library-defined models:
 
 All of these models except LSTM that returns sequences are attributed to `Single Shot Model` stated ahead. Please refer to the following image from TensorFlow documentation to have a illustration on its mechanism.
 
-<img src="./img/multistep_conv.png" alt="framework" title="framework" width="4000" height="500"/>
+<img src="./img/multistep_conv.png" alt="framework" title="framework" width="300" height="50"/>
 
 
 ## Advanced Model
@@ -170,7 +170,7 @@ class CNNAutoRegressor(AutoRegressor):
 ```
 
 
-<img src="./img/multistep_autoregressive.png" alt="framework" title="framework" width="4000" height="500"/>
+<img src="./img/multistep_autoregressive.png" alt="framework" title="framework" width="500" height="50"/>
 
 
 # Portfolios for back testing
