@@ -130,10 +130,10 @@ For CNN, during the warm up part we should return its predictions for all featur
 * Unlike LSTM, CNN cannot memorize the previous features, so what we can do here is create a new feature set of shape (number of look back periods, number of features) for the current time step. We do this by dropping the most previous time step's features and concatenate the prediction of last time step's features into our feature set.
 * We then forward such predictions of the current time step to next time step
 
-> **Warning**
+> **Warning**   
 > Only use operations provided by TensorFlow framework here. Using numpy operation or convert tensors to numpy arrays cannot work here as tensors can be symbolic during computation.
 
-> **Warning**
+> **Warning**   
 > Avoid accessing information of any tensors, because they can be symbolic during computation.
 
 ```python
