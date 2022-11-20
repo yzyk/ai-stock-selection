@@ -33,7 +33,7 @@ By Single Responsibility, we argue each class should do only one job. We hereby 
 
 The reason behind this design is intuitive. In the real world, we have a lot of models that have already been written by libraries or frameworks, such as Random Forest, Linear Regression, CNN. But we also have tons of models that we have to derive some classes and write their mechanisms on our own. Thus we need a separate module `Zoo` to define these prototypes. We then encapsulate these self-defined sophisticated models together with library models into `Model` module.
 
-<img src="./img/model.png" alt="framework" title="framework" width="4000" height="500"/>
+<img src="./img/Model.png" alt="framework" title="framework" width="4000" height="500"/>
 
 We derive two subclasses from `Model`, which are `MlModel` and `DlModel`, representing abstract classes for machine learning and deep learning models. We then derive subclasses from these two classes, overriding `_create_model()` to define the `_model` variable. 
 
@@ -130,17 +130,11 @@ For CNN, during the warm up part we should return its predictions for all featur
 * Unlike LSTM, CNN cannot memorize the previous features, so what we can do here is create a new feature set of shape (number of look back periods, number of features) for the current time step. We do this by dropping the most previous time step's features and concatenate the prediction of last time step's features into our feature set.
 * We then forward such predictions of the current time step to next time step
 
-<div class="alert alert-block alert-danger">
-    <b>Warning:</b> 
-    <br>
-    Only use operations provided by TensorFlow framework here. Using numpy operation or convert tensors to numpy arrays cannot work here as tensors can be symbolic during computation.
-</div>
+> **Warning**
+> Only use operations provided by TensorFlow framework here. Using numpy operation or convert tensors to numpy arrays cannot work here as tensors can be symbolic during computation.
 
-<div class="alert alert-block alert-danger">
-    <b>Warning:</b> 
-    <br>
-    Avoid accessing information of any tensors, because they can be symbolic during computation.
-</div>
+> **Warning**
+> Avoid accessing information of any tensors, because they can be symbolic during computation.
 
 ```python
 class CNNAutoRegressor(AutoRegressor):
