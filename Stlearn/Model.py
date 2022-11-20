@@ -5,13 +5,16 @@ from abc import ABC, abstractmethod
 import IPython
 
 import matplotlib.pyplot as plt
+
+import Constant
 from Data import *
+from Zoo import *
 import numpy as np
 import pandas as pd
 import tensorflow as tf
-from utils import DATA_PATH
 from sklearn.linear_model import LinearRegression
 from sklearn.ensemble import RandomForestRegressor, AdaBoostRegressor, GradientBoostingRegressor
+from utils import *
 
 
 class Model(ABC):
@@ -79,10 +82,10 @@ class MlModel(Model):
 class DlModel(Model):
     _input_shape = None
 
-    def __init__(self, name, input_shape) -> None:
-        self._input_shape = input_shape
+    def __init__(self, name) -> None:
+        self._input_shape = (Constant.WIN_SIZE, Constant.NUM_FEATURES)
         super().__init__(name)
-        self._model.compile(loss=ERROR, metrics=[ERROR], weighted_metrics=[ERROR])
+        self._model.compile(loss=Constant.ERROR, metrics=[Constant.ERROR], weighted_metrics=[Constant.ERROR])
         pass
 
     @abstractmethod
@@ -90,16 +93,21 @@ class DlModel(Model):
         pass
 
     def fit(self, data) -> None:
-        max_epochs = 10
         X_train, y_train = data.get_train()
         X_val, y_val = data.get_val()
         history_ = self._model.fit(X_train, y_train,
-                                   epochs=max_epochs,
+                                   epochs=Constant.MAX_EPOCHS,
                                    validation_data=(X_val, y_val)
                                    )
         fig, axs = plt.subplots(1, 2, figsize=(24, 10))
         self._plot_train(history=history_, axs=axs)
         pass
+
+    def predict(self, X):
+        pred = self._model.predict(X)
+        if len(pred.shape) == 2:
+            pred = pred[:, :, np.newaxis]
+        return pred
 
     def evaluate(self, data, s) -> None:
         X_test = None
@@ -116,14 +124,14 @@ class DlModel(Model):
 
     def info(self):
         tf.keras.utils.plot_model(
-            self._model, to_file=MODEL_IMAGE_PATH + '/' + self._name + '.png', show_shapes=True, dpi=100
+            self._model, to_file=Constant.MODEL_IMAGE_PATH + '/' + self._name + '.png', show_shapes=True, dpi=100
         )
         print("Parameters number in model: ", self._model.count_params())
-        return IPython.display.Image(MODEL_IMAGE_PATH + '/' + self._name + '.png')
+        return IPython.display.Image(Constant.MODEL_IMAGE_PATH + '/' + self._name + '.png')
 
     def _plot_train(self, history, axs):
         # Determine the name of the key that indexes into the accuracy metric
-        acc_string = 'weighted_' + ERROR
+        acc_string = 'weighted_' + Constant.ERROR
         # Plot loss
         axs[0].plot(history.history['loss'])
         axs[0].plot(history.history['val_loss'])
@@ -204,8 +212,20 @@ class LSTMModel(DlModel):
     def _create_model(self):
         self._model = tf.keras.Sequential([
             tf.keras.layers.LSTM(16, return_sequences=True, input_shape=self._input_shape),
-            #tf.keras.layers.Flatten(),
+            # tf.keras.layers.Flatten(),
             tf.keras.layers.LSTM(1, return_sequences=True)
-            #tf.keras.layers.Dense(1, name='dense_head')
+            # tf.keras.layers.Dense(1, name='dense_head')
         ])
         pass
+
+
+class LSTMAutoRegressorModel(DlModel):
+    def _create_model(self):
+        self._model = LSTMAutoRegressor(50, 30)
+        pass
+
+
+class CNNAutoRegressorModel(DlModel):
+    def _create_model(self):
+        self._model = CNNAutoRegressor(50, 30)
+    pass

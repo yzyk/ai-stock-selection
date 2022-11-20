@@ -85,7 +85,7 @@ class SimpleNNFactory(DlFactory):
 
     def _load(self):
         super()._load()
-        self._model = SimpleNNModel('SimpleNN', self._data.get_shape())
+        self._model = SimpleNNModel('SimpleNN')
         pass
 
 
@@ -93,7 +93,7 @@ class CNNFactory(DlFactory):
 
     def _load(self):
         super()._load()
-        self._model = CNNModel('CNN', self._data.get_shape())
+        self._model = CNNModel('CNN')
         pass
 
 
@@ -101,6 +101,22 @@ class LSTMFactory(DlFactory):
 
     def _load(self):
         super()._load()
-        self._model = LSTMModel('LSTM', self._data.get_shape())
+        self._model = LSTMModel('LSTM')
+        pass
+
+
+class LSTMAutoRegressorFactory(DlFactory):
+
+    def _load(self):
+        super()._load()
+        self._model = LSTMAutoRegressorModel('LSTMAutoRegressor')
+        pass
+
+
+class CNNAutoRegressorFactory(DlFactory):
+
+    def _load(self):
+        super()._load()
+        self._model = CNNAutoRegressorModel('CNNAutoRegressor')
         pass
 

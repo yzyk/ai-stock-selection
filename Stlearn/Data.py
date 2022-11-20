@@ -72,7 +72,7 @@ class Data(ABC):
         pass
 
     def _generate_data(self, train_start, val_start, test_start, test_end, three_d=False) -> None:
-        self._data = pd.read_parquet(DATA_PATH)
+        self._data = pd.read_parquet(Constant.DATA_PATH)
         self._data = self._data[(self._data['Date'] >= train_start) &
                                 (self._data['Date'] < test_end)].reset_index().drop('index', axis=1)
 
