@@ -1,20 +1,10 @@
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
-
-import IPython
-
-import matplotlib.pyplot as plt
-
-import Constant
-from Data import *
 from Zoo import *
-import numpy as np
-import pandas as pd
-import tensorflow as tf
 from sklearn.linear_model import LinearRegression
 from sklearn.ensemble import RandomForestRegressor, AdaBoostRegressor, GradientBoostingRegressor
 from utils import *
+import matplotlib.pyplot as plt
 
 
 class Model(ABC):
@@ -82,10 +72,14 @@ class MlModel(Model):
 class DlModel(Model):
     _input_shape = None
 
-    def __init__(self, name) -> None:
+    def __init__(self,
+                 name, optimizer='rmsprop', loss=Constant.ERROR, metric=Constant.ERROR,
+                 weighted_metric=Constant.ERROR) -> None:
         self._input_shape = (Constant.WIN_SIZE, Constant.NUM_FEATURES)
         super().__init__(name)
-        self._model.compile(loss=Constant.ERROR, metrics=[Constant.ERROR], weighted_metrics=[Constant.ERROR])
+        self._model.compile(
+            optimizer=tf.keras.optimizers.Adam(learning_rate=1e-3), loss=Constant.ERROR, metrics=[Constant.ERROR],
+            weighted_metrics=[Constant.ERROR])
         pass
 
     @abstractmethod
@@ -93,11 +87,13 @@ class DlModel(Model):
         pass
 
     def fit(self, data) -> None:
-        X_train, y_train = data.get_train()
-        X_val, y_val = data.get_val()
-        history_ = self._model.fit(X_train, y_train,
+        data_train = data.get_train()
+        data_val = data.get_val()
+        if type(data_train) is not tuple:
+            data_train = (data_train, None)
+        history_ = self._model.fit(*data_train,
                                    epochs=Constant.MAX_EPOCHS,
-                                   validation_data=(X_val, y_val)
+                                   validation_data=data_val
                                    )
         fig, axs = plt.subplots(1, 2, figsize=(24, 10))
         self._plot_train(history=history_, axs=axs)
@@ -143,6 +139,27 @@ class DlModel(Model):
         axs[1].plot(history.history[acc_string])
         axs[1].plot(history.history['val_' + acc_string])
         axs[1].set_title(self._name + ' ' + acc_string)
+        axs[1].set_ylabel(acc_string)
+        axs[1].set_xlabel('epoch')
+        axs[1].legend(['train', 'validation'], loc='upper left')
+        pass
+
+    @classmethod
+    def plot_train(cls, history, name='test'):
+        # Determine the name of the key that indexes into the accuracy metric
+        fig, axs = plt.subplots(1, 2, figsize=(24, 10))
+        acc_string = 'weighted_' + Constant.ERROR
+        # Plot loss
+        axs[0].plot(history.history['loss'])
+        axs[0].plot(history.history['val_loss'])
+        axs[0].set_title(name + " " + 'model loss')
+        axs[0].set_ylabel('loss')
+        axs[0].set_xlabel('epoch')
+        axs[0].legend(['train', 'validation'], loc='upper left')
+        # Plot accuracy
+        axs[1].plot(history.history[acc_string])
+        axs[1].plot(history.history['val_' + acc_string])
+        axs[1].set_title(name + ' ' + acc_string)
         axs[1].set_ylabel(acc_string)
         axs[1].set_xlabel('epoch')
         axs[1].legend(['train', 'validation'], loc='upper left')
@@ -221,11 +238,83 @@ class LSTMModel(DlModel):
 
 class LSTMAutoRegressorModel(DlModel):
     def _create_model(self):
-        self._model = LSTMAutoRegressor(50, 30)
+        self._model = LSTMAutoRegressor(50)
         pass
 
 
 class CNNAutoRegressorModel(DlModel):
     def _create_model(self):
-        self._model = CNNAutoRegressor(50, 30)
+        self._model = CNNAutoRegressor(50)
+
     pass
+
+
+class StandardVariationAutoEncoderModel(DlModel):
+    def __init__(self, name):
+        negloglik = lambda x, rv_x: -rv_x.log_prob(x)
+        super().__init__(name)
+        pass
+
+    def _create_model(self):
+        self._model = StandardVariationalAutoEncoder(30, input_shape=(Constant.NUM_STOCKS, 1))
+        pass
+
+    def fit(self, data):
+        X_train, y_train = data.get_train()
+        X_val, y_val = data.get_val()
+        history_ = self._model.fit(y_train, y_train,
+                                   epochs=Constant.MAX_EPOCHS,
+                                   validation_data=(y_val, y_val),
+                                   callbacks=[], verbose=2
+                                   )
+        fig, axs = plt.subplots(1, 2, figsize=(24, 10))
+        self._plot_train(history=history_, axs=axs)
+        pass
+
+    def predict(self, X=None):
+        pred = self._model.predict(X, Constant.FORWARD_STEPS_SIZE)
+        return pred.numpy()[:, :, 0].T[:, :, np.newaxis]
+
+    def info_encoder(self):
+        tf.keras.utils.plot_model(
+            self._model._encoder, to_file=Constant.MODEL_IMAGE_PATH + '/' + self._name + '.png', show_shapes=True,
+            dpi=100
+        )
+        print("Parameters number in model: ", self._model.count_params())
+        return IPython.display.Image(Constant.MODEL_IMAGE_PATH + '/' + self._name + '.png')
+
+    def info_decoder(self):
+        tf.keras.utils.plot_model(
+            self._model._decoder, to_file=Constant.MODEL_IMAGE_PATH + '/' + self._name + '.png', show_shapes=True,
+            dpi=100
+        )
+        print("Parameters number in model: ", self._model.count_params())
+        return IPython.display.Image(Constant.MODEL_IMAGE_PATH + '/' + self._name + '.png')
+
+
+class ConditionalVariationAutoEncoderModel(DlModel):
+
+    def __init__(self, name):
+        super().__init__(name)
+
+    def _create_model(self):
+        self._model = ConditionalVariationalAutoEncoder()
+        pass
+
+    def predict(self, X=None):
+        pred = self._model.predict(X)
+        pred = tf.transpose(tf.squeeze(pred))
+        pred = tf.expand_dims(pred, axis=-1)
+        return pred.numpy()
+
+    def evaluate(self, data, s) -> None:
+        data_test = None
+        if s == 'val':
+            data_test = data.get_val()
+        if s == 'test':
+            data_test = data.get_test()
+        score_ = self._model.evaluate(data_test)
+        print("{n:s}: Test loss: {l:3.5f}".format(
+            n=self._name, l=score_[0])
+        )
+        pass

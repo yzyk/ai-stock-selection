@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from Data import *
+import Constant
+from Data.DataProcessor import *
 from Model import *
 
 
 class StlearnFactory(ABC):
-
     _data = None
     _model = None
 
@@ -39,21 +39,31 @@ class MlFactory(StlearnFactory):
 
     @abstractmethod
     def _load(self):
-        self._data = MlData(train_start=self._train_start, val_start=self._val_start,
-                            test_start=self._test_start, test_end=self._test_end)
+        self._data = TwoDimUnWinDataByStockDateByFeatureProcessor(train_start=self._train_start,
+                                                                  val_start=self._val_start,
+                                                                  test_start=self._test_start,
+                                                                  test_end=self._test_end).load_data()
         pass
 
 
 class DlFactory(StlearnFactory):
 
-    def __init__(self, train_start, val_start, test_start, test_end, data_window_size):
-        self._data_window_size = data_window_size
+    def __init__(self, train_start, val_start, test_start, test_end, data_window_size=30, forward_size=15,
+                 generator=False):
+        self._window_size = data_window_size
+        self._forward_size = forward_size
+        self._generator = generator
         super().__init__(train_start, val_start, test_start, test_end)
 
     @abstractmethod
     def _load(self):
-        self._data = DlData(train_start=self._train_start, val_start=self._val_start, test_start=self._test_start,
-                            test_end=self._test_end, data_window_size=self._data_window_size)
+        self._data = ThreeDimWinDataByStockDateByWinByFeatureProcessor(train_start=self._train_start,
+                                                                       val_start=self._val_start,
+                                                                       test_start=self._test_start,
+                                                                       test_end=self._test_end,
+                                                                       win_size=self._data_window_size,
+                                                                       forward_size=self._forward_size,
+                                                                       generator=self._generator).load_data()
         pass
 
 
@@ -62,6 +72,7 @@ class LinearRegressionFactory(MlFactory):
     def _load(self):
         super()._load()
         self._model = LinearRegressionModel('lr')
+
     pass
 
 
@@ -70,6 +81,7 @@ class RandomForestRegressorFactory(MlFactory):
     def _load(self):
         super()._load()
         self._model = RandomForestRegressorModel('rf')
+
     pass
 
 
@@ -120,3 +132,27 @@ class CNNAutoRegressorFactory(DlFactory):
         self._model = CNNAutoRegressorModel('CNNAutoRegressor')
         pass
 
+
+class StandardVariationAutoEncoderFactory(DlFactory):
+
+    def _load(self):
+        self._data = ThreeDimUnWinDataByDateByStockByFeatureProcessor(train_start=self._train_start,
+                                                                      val_start=self._val_start,
+                                                                      test_start=self._test_start,
+                                                                      test_end=self._test_end).load_data()
+        self._model = StandardVariationAutoEncoderModel('VAE')
+        pass
+
+
+class ConditionalVariationAutoEncoderFactory(DlFactory):
+
+    def _load(self):
+        self._data = FourDimWinDataByDateByWinByStockByFeatureProcessor(train_start=self._train_start,
+                                                                        val_start=self._val_start,
+                                                                        test_start=self._test_start,
+                                                                        test_end=self._test_end,
+                                                                        win_size=self._window_size,
+                                                                        forward_size=self._forward_size,
+                                                                        generator=self._generator).load_data()
+        self._model = ConditionalVariationAutoEncoderModel('VAE')
+        pass

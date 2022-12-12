@@ -1,8 +1,21 @@
 import os
+import tensorflow as tf
 
-DATA_PATH = "./data/data.parquet.gzip"
+try:
+    import google.colab
 
-MODEL_IMAGE_PATH = os.path.realpath('./plot')
+    IN_COLAB = True
+except:
+    IN_COLAB = False
+
+if IN_COLAB:
+    PATH = '/content/drive/MyDrive/capstone/Deliverable/project'
+else:
+    PATH = ".."
+
+DATA_PATH = PATH + "/data/data.parquet.gzip"
+
+MODEL_IMAGE_PATH = PATH + '/plot'
 
 ERROR = 'mean_squared_error'
 
@@ -12,6 +25,21 @@ N_DAYS = 252
 
 NUM_FEATURES = 152
 
-WIN_SIZE = 60
+NUM_STOCKS = 501
 
-MAX_EPOCHS = 10
+WIN_SIZE = 30
+
+FORWARD_STEPS_SIZE = 15
+
+MAX_EPOCHS = 1
+
+BATCH_SIZE = 64
+
+STOCK_LIST = None
+
+COMPILE_CONFIG = {
+    'optimizer': tf.keras.optimizers.Adam(learning_rate=1e-3),
+    'loss': ERROR,
+    'metrics': [ERROR],
+    'weighted_metrics': [ERROR]
+}

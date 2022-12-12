@@ -1,11 +1,7 @@
 from __future__ import annotations
 
-import copy
-from abc import ABC, abstractmethod
-
 import pandas as pd
 
-from Data import *
 from Model import *
 
 
@@ -136,7 +132,6 @@ class AlgoTradePortfolio(Portfolio):
     def construct(self, data, model):
         df = pd.DataFrame([])
         df[['Date', 'Ticker', 'Close', 'Return', 'Market Return']] = pd.DataFrame(data.ids_test)
-        df['er'] = pd.DataFrame(data.y_test)
         df = df.set_index('Date')
         period = df.sort_index().index.drop_duplicates().tolist()
         long_stocks, long_weights, short_stocks, short_weights = self._strategy(data, model)
@@ -204,26 +199,20 @@ class LongRandomPortfolio(LongPortfolio):
 
 class LongBestPortfolio(LongPortfolio):
     def _strategy(self, data, model):
-        t = data.ids_test
-        first_indexes = pd.DataFrame(t).reset_index().groupby(1)['index'].min()
-        count = pd.DataFrame(t).reset_index().groupby(1)['index'].count()
-        first_indexes = first_indexes.drop(count[count != count.max()].index)
-        pred = model.predict(data.X_test[first_indexes, :])[:, :, 0]
+        stock_list = np.unique(data.ids_test[:, 1])
+        pred = model.predict(data.X_test)[:, :, 0]
         pred_df = pd.DataFrame(pred).T
-        pred_df.columns = first_indexes.index
-        long_stocks = first_indexes.index[pred_df.loc[:30, :].mean().argmax()]
+        pred_df.columns = stock_list
+        long_stocks = stock_list[pred_df.loc[:30, :].mean().argmax()]
         return [long_stocks], [1], [], []
 
 
 class LongBestThreePortfolio(LongPortfolio):
     def _strategy(self, data, model):
-        t = data.ids_test
-        first_indexes = pd.DataFrame(t).reset_index().groupby(1)['index'].min()
-        count = pd.DataFrame(t).reset_index().groupby(1)['index'].count()
-        first_indexes = first_indexes.drop(count[count != count.max()].index)
-        pred = model.predict(data.X_test[first_indexes, :])[:, :, 0]
+        stock_list = np.unique(data.ids_test[:, 1])
+        pred = model.predict(data.X_test)[:, :, 0]
         pred_df = pd.DataFrame(pred).T
-        pred_df.columns = first_indexes.index
+        pred_df.columns = stock_list
         long_stocks = pred_df.loc[:30, :].mean().sort_values(ascending=False).index[:3]
         return long_stocks, [1, 1, 1], [], []
 
@@ -318,14 +307,17 @@ class DollarNeutralLongShortPortfolio(AlgoTradePortfolio):
 
 class LongShortBestShotPortfolio(DollarNeutralLongShortPortfolio):
     def _strategy(self, data, model):
+        """
         t = data.ids_test
         first_indexes = pd.DataFrame(t).reset_index().groupby(1)['index'].min()
         count = pd.DataFrame(t).reset_index().groupby(1)['index'].count()
         first_indexes = first_indexes.drop(count[count != count.max()].index)
-        pred = model.predict(data.X_test[first_indexes, :])[:, :, 0]
+        """
+        stock_list = np.unique(data.ids_test[:, 1])
+        pred = model.predict(data.X_test)[:, :, 0]
         pred_df = pd.DataFrame(pred).T
-        pred_df.columns = first_indexes.index
-        long_stocks = first_indexes.index[pred_df.loc[:30, :].mean().argmax()]
-        short_stocks = first_indexes.index[pred_df.loc[:30, :].mean().argmin()]
+        pred_df.columns = stock_list
+        long_stocks = stock_list[pred_df.loc[:30, :].mean().argmax()]
+        short_stocks = stock_list[pred_df.loc[:30, :].mean().argmin()]
         return [long_stocks], [1], [short_stocks], [1]
 
