@@ -19,7 +19,7 @@ The changing aspects of data and data input pipeline can be concluded as the fol
 
 After an overwhelming research, we decide to design an architecture combing interface oriented programming concepts, together with well-known decorator pattern and factory method pattern for the data module.
 
-<img src="./img/Data.png" alt="framework" title="framework" width="40000" height="12000"/>
+<img src="./img/Data.png" alt="framework" title="framework" width="40000" height="800"/>
 
 <u>**Interface oriented programming**</u>
 

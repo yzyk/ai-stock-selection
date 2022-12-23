@@ -142,14 +142,14 @@ We currently encapsulated some well-known library-defined models:
 
 All of these models except LSTM that returns sequences are attributed to `Single Shot Model` stated ahead. Please refer to the following image from TensorFlow documentation to have a illustration on its mechanism.
 
-<img src="./img/multistep_conv.png" alt="framework" title="framework" width="300" height="50"/>
+<img src="./img/multistep_conv.png" alt="framework" title="framework" width="300" height="300"/>
 
 
 ## Advanced Model
 
 We also did some researches on advanced deep learning models. The first family of advanced models that we implement is auto regressive models. Please refer to the following image from TensorFlow documentation to have a illustration on its mechanism.
 
-<img src="./img/multistep_autoregressive.png" alt="framework" title="framework" width="500" height="50"/>
+<img src="./img/multistep_autoregressive.png" alt="framework" title="framework" width="500" height="300"/>
 
 On the high level, the model is warmed up with input features. It then starts to make predictions for multiple time steps. During each time step:
 * It takes in inputs and outputs for previous time steps, and memorized states (LSTM only)
