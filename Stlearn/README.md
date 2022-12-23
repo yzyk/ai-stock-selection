@@ -5,7 +5,7 @@ We develop Stlearn library to encapsulate machine learning codes. We employ Obje
 * Handle possible future changes in requirement in advance,
 * Encapsulate as many codes as possible and only write codes when necessary.
 
-To achieve this, we select Abstract Factory Pattern (Erich Gamma, 1994) as my design pattern for Stlearn framework. Below, we define system as a machine learning client system that is either faced with commercial user or faced with researcher that studies the performance of different machine learning models. We define product as required data and machine learning model. This pattern applies to our framework because:
+To achieve this, we select Abstract Factory Pattern as my design pattern for Stlearn framework. Below, we define system as a machine learning client system that is either faced with commercial user or faced with researcher that studies the performance of different machine learning models. We define product as required data and machine learning model. This pattern applies to our framework because:
 * The system needs to be independent from the way the products are created, client only cares about what model to call and it is solely the developer's responsibility to implement and specify how products are created using specified protocol or API.
 * The system should be configured to work with multiple families of products, where different machine learning task consist of pipelines with different dataset and models.
 * A family of products is designed to work together, where one type machine learning task requires a specific type of data and models.
