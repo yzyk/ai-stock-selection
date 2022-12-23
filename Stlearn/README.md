@@ -79,7 +79,7 @@ By Single Responsibility, we argue each class should do only one job. We hereby 
 
 The reason behind this design is intuitive. In the real world, we have a lot of models that have already been written by libraries or frameworks, such as Random Forest, Linear Regression, CNN. But we also have tons of models that we have to derive some classes and write their mechanisms on our own. Thus we need a separate module `Zoo` to define these prototypes. We then encapsulate these self-defined sophisticated models together with library models into `Model` module.
 
-<img src="./Stlearn/img/Model.png" alt="framework" title="framework" width="4000" height="500"/>
+<img src="./img/Model.png" alt="framework" title="framework" width="4000" height="500"/>
 
 We define an abstract class `Model`, which represent all machine learning and deep learning models. Since it is unclear at this level such model is machine learning model or deep learning model, and because machine learning model and deep learning model depends on different libraries leading to different data and behavior of Model project, nearly all functions of this class are set to be abstract and needs to be override by its subclasses. In the design, the subclass should do the following:
 
@@ -142,14 +142,14 @@ We currently encapsulated some well-known library-defined models:
 
 All of these models except LSTM that returns sequences are attributed to `Single Shot Model` stated ahead. Please refer to the following image from TensorFlow documentation to have a illustration on its mechanism.
 
-<img src="./Stlearn/img/multistep_conv.png" alt="framework" title="framework" width="300" height="50"/>
+<img src="./img/multistep_conv.png" alt="framework" title="framework" width="300" height="50"/>
 
 
 ## Advanced Model
 
 We also did some researches on advanced deep learning models. The first family of advanced models that we implement is auto regressive models. Please refer to the following image from TensorFlow documentation to have a illustration on its mechanism.
 
-<img src="./Stlearn/img/multistep_autoregressive.png" alt="framework" title="framework" width="500" height="50"/>
+<img src="./img/multistep_autoregressive.png" alt="framework" title="framework" width="500" height="50"/>
 
 On the high level, the model is warmed up with input features. It then starts to make predictions for multiple time steps. During each time step:
 * It takes in inputs and outputs for previous time steps, and memorized states (LSTM only)
