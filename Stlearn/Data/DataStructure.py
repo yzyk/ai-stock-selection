@@ -166,7 +166,8 @@ class ArrayGenerator(Generator):
         pass
 
     def __call__(self, *args, **kwargs):
-        return self.__next__()
+        self.reset()
+        return self
 
     def _compute(self, data):
         for func in self._ops_funcs:

@@ -189,71 +189,85 @@ class VariationalAutoEncoder(AutoEncoder):
 
 class StandardVariationalAutoEncoder(VariationalAutoEncoder):
 
+    def __init__(self, encoded_size, input_shape=None, output_shape=None):
+        self.output_steps = input_shape[0]
+        self.stocks = input_shape[1]
+        super().__init__(encoded_size, input_shape, output_shape)
+
     def _define_encoder(self):
         self._define_prior()
         self._encoder = tf.keras.Sequential([
             tf.keras.layers.InputLayer(input_shape=self._input_shape),
-            tf.keras.layers.Lambda(lambda x: tf.cast(x, tf.float32) - 0.5),
+            tf.keras.layers.Reshape([self.output_steps, -1]),
             tf.keras.layers.Conv1D(self._base_depth, 5, padding='same', activation=tf.nn.leaky_relu),
             tf.keras.layers.Conv1D(2 * self._base_depth, 5, padding='same', activation=tf.nn.leaky_relu),
             tf.keras.layers.Conv1D(4 * self._base_depth, 7, padding='same', activation=tf.nn.leaky_relu),
             tf.keras.layers.Flatten(),
-            tf.keras.layers.Dense(tfp.layers.IndependentNormal.params_size(self._encoded_size)),
-            tfp.layers.IndependentNormal(self._encoded_size)
+            tf.keras.layers.Dense(tfp.layers.IndependentNormal.params_size(
+                self._encoded_size * self.output_steps)
+            ),
+            tfp.layers.IndependentNormal(self._encoded_size * self.output_steps)
         ])
         pass
 
     def _define_decoder(self):
         self._decoder = tf.keras.Sequential([
-            tf.keras.layers.InputLayer(input_shape=[self._encoded_size]),
-            tf.keras.layers.Reshape([1, self._encoded_size]),
+            tf.keras.layers.InputLayer(input_shape=[self._encoded_size * self.output_steps]),
+            tf.keras.layers.Reshape([self.output_steps, -1]),
             tf.keras.layers.Conv1DTranspose(4 * self._base_depth, 7, padding='same', activation=tf.nn.leaky_relu),
-            tf.keras.layers.Conv1DTranspose(2 * self._base_depth, 5, padding='same', activation=tf.nn.leaky_relu),
-            tf.keras.layers.Conv1DTranspose(self._base_depth, 5, padding='same', activation=tf.nn.leaky_relu),
-            tf.keras.layers.Dense(tfp.layers.IndependentNormal.params_size(self._output_shape)),
-            tfp.layers.IndependentNormal(self._output_shape)
+            tf.keras.layers.Conv1DTranspose(2 * self._base_depth, 5, padding='same', activation=tf.nn.leaky_relu
+                                            ),
+            tf.keras.layers.Conv1DTranspose(self._base_depth, 5, padding='same', activation=tf.nn.leaky_relu
+                                            ),
+            tf.keras.layers.Dense(tfp.layers.IndependentNormal.params_size((self.stocks, 1))
+                                  ),
+            tfp.layers.IndependentNormal((self.stocks, 1))
         ])
         pass
 
     def _define_prior(self):
         self._prior = tfp.distributions.Independent(tfp.distributions.Normal(
-            loc=tf.zeros(self._encoded_size), scale=1),
+            loc=tf.zeros(self._encoded_size * self.output_steps), scale=1),
             reinterpreted_batch_ndims=1)
 
         pass
 
     def call(self, inputs, training=None):
+        y = inputs
+        # tf.print(tf.shape(X))
         if training:
-            X = self._encoder(inputs)
-            # print(type(X))
-            pred = self._decoder(X)
+            f = self._encoder(y)
+            f = self._decoder(f)
+            pred = f
         else:
-            Z = self._prior.sample(tf.shape(inputs)[0])
-            # print(type(Z))
-            # print(Z.shape)
-            pred = self._decoder(Z)
+            Z = self._prior.sample(tf.shape(y)[0])
+            f = self._decoder(Z)
+            pred = f
         return pred
 
-    def predict(self, X, steps):
-        preds = []
-        for step in steps:
-            preds.append(tf.squeeze(self(X)))
-        return preds[:, :, np.newaxis]
+    def predict(self, X):
+        preds = self(X)
+        return preds
 
 
 class ConditionalVariationalAutoEncoder(VariationalAutoEncoder):
-
     class MyLSTMAutoRegressor(AutoRegressor):
-        def __init__(self, output_size):
+        def __init__(self, output_size,
+                     num_stocks,
+                     win_size, output_steps):
             super().__init__()
             self.init = tf.keras.initializers.GlorotNormal()
-            self.output_steps = Constant.FORWARD_STEPS_SIZE
-            self.input_reshape = tf.keras.layers.Reshape([Constant.WIN_SIZE, -1])
-            self.fp1 = tf.keras.layers.Dense(Constant.NUM_STOCKS * output_size, kernel_initializer=self.init)
-            self.lstm_cell = tf.keras.layers.LSTMCell(Constant.NUM_STOCKS * 1)
+            self.output_steps = output_steps
+            self.num_stocks = num_stocks
+            self.win_size = win_size
+            self.output_size = output_size
+
+            self.input_reshape = tf.keras.layers.Reshape([self.win_size, -1])
+            self.fp1 = tf.keras.layers.Dense(self.num_stocks * self.output_size, kernel_initializer=self.init)
+            self.lstm_cell = tf.keras.layers.LSTMCell(self.num_stocks * 1)
             self.lstm_rnn = tf.keras.layers.RNN(self.lstm_cell, return_state=True)
-            self.fp2 = tf.keras.layers.Dense(Constant.NUM_STOCKS * output_size)
-            self._output_reshape = tf.keras.layers.Reshape([self.output_steps, Constant.NUM_STOCKS, output_size])
+            self.fp2 = tf.keras.layers.Dense(self.num_stocks * self.output_size)
+            self._output_reshape = tf.keras.layers.Reshape([self.output_steps, self.num_stocks, self.output_size])
 
         def warmup(self, inputs):
             inputs = self.input_reshape(inputs)
@@ -278,17 +292,20 @@ class ConditionalVariationalAutoEncoder(VariationalAutoEncoder):
             predictions = tf.transpose(predictions, [1, 0, 2])
             return self._output_reshape(predictions)
 
-    def __init__(self, encoded_size=15, output_size=30):
+    def __init__(self, encoded_size, output_size, num_stocks, win_size,
+                 output_steps):
+        self.num_stocks = num_stocks
+        self.output_steps = output_steps
         self.init = tf.keras.initializers.GlorotNormal()
-        super().__init__(encoded_size, input_shape=(Constant.FORWARD_STEPS_SIZE, Constant.NUM_STOCKS),
+        super().__init__(encoded_size, input_shape=(output_steps, num_stocks),
                          output_shape=(output_size, 1))
-        self._define_beta_layers(output_size)
+        self._define_beta_layers(output_size, num_stocks, win_size, output_steps)
 
-    def _define_beta_layers(self, output_size):
+    def _define_beta_layers(self, output_size, num_stocks, win_size, output_steps):
 
         # None, win, stocks, features
 
-        self._beta_layers = self.MyLSTMAutoRegressor(output_size)
+        self._beta_layers = self.MyLSTMAutoRegressor(output_size, num_stocks, win_size, output_steps)
 
         # None, steps, stocks, K
 
@@ -304,19 +321,19 @@ class ConditionalVariationalAutoEncoder(VariationalAutoEncoder):
             tf.keras.layers.Conv1D(4 * self._base_depth, 7, padding='same', activation=tf.nn.leaky_relu),
             tf.keras.layers.Flatten(),
             tf.keras.layers.Dense(tfp.layers.IndependentNormal.params_size(
-                self._encoded_size * Constant.FORWARD_STEPS_SIZE)
-                                  ),
-            tfp.layers.IndependentNormal(self._encoded_size * Constant.FORWARD_STEPS_SIZE)
+                self._encoded_size * self.output_steps)
+            ),
+            tfp.layers.IndependentNormal(self._encoded_size * self.output_steps)
         ])
         pass
 
     def _define_decoder(self):
         self._decoder = tf.keras.Sequential([
-            tf.keras.layers.InputLayer(input_shape=[self._encoded_size * Constant.FORWARD_STEPS_SIZE]),
-            tf.keras.layers.Reshape([Constant.FORWARD_STEPS_SIZE, -1]),
+            tf.keras.layers.InputLayer(input_shape=[self._encoded_size * self.output_steps]),
+            tf.keras.layers.Reshape([self.output_steps, -1]),
             tf.keras.layers.Conv1DTranspose(4 * self._base_depth, 7, padding='same', activation=tf.nn.leaky_relu),
             tf.keras.layers.Conv1DTranspose(2 * self._base_depth, 5, padding='same', activation=tf.nn.leaky_relu
-                                           ),
+                                            ),
             tf.keras.layers.Conv1DTranspose(self._base_depth, 5, padding='same', activation=tf.nn.leaky_relu
                                             ),
             tf.keras.layers.Dense(tfp.layers.IndependentNormal.params_size(self._output_shape)
@@ -327,7 +344,7 @@ class ConditionalVariationalAutoEncoder(VariationalAutoEncoder):
 
     def _define_prior(self):
         self._prior = tfp.distributions.Independent(tfp.distributions.Normal(
-            loc=tf.zeros(self._encoded_size * Constant.FORWARD_STEPS_SIZE), scale=1),
+            loc=tf.zeros(self._encoded_size * self.output_steps), scale=1),
             reinterpreted_batch_ndims=1)
 
         pass
@@ -338,7 +355,7 @@ class ConditionalVariationalAutoEncoder(VariationalAutoEncoder):
         # tf.print(tf.shape(X))
         if training:
             beta = self._beta_layers(X)
-            y = tf.keras.layers.Reshape([Constant.FORWARD_STEPS_SIZE, -1])(y)
+            y = tf.keras.layers.Reshape([self.output_steps, -1])(y)
             f = self._encoder(y)
             f = self._decoder(f)
             pred = beta @ f
@@ -349,6 +366,135 @@ class ConditionalVariationalAutoEncoder(VariationalAutoEncoder):
             pred = beta @ f
         return pred
 
+    def predict(self, X):
+        beta = self._beta_layers(X)
+        Z = self._prior.sample(tf.shape(X)[0])
+        f = self._decoder(Z)
+        pred = beta @ f
+        return pred
+
+
+class ConditionalVariationalAutoEncoderGraph(VariationalAutoEncoder):
+    class MyLSTMAutoRegressor(AutoRegressor):
+
+        def __init__(self, output_size,
+                     num_stocks,
+                     win_size, output_steps):
+            super().__init__()
+            self.init = tf.keras.initializers.GlorotNormal()
+            self.output_steps = output_steps
+            self.num_stocks = num_stocks
+            self.win_size = win_size
+            self.output_size = output_size
+
+            self.input_reshape = tf.keras.layers.Reshape([self.win_size, -1])
+            self.fp1 = tf.keras.layers.Dense(self.num_stocks * self.output_size, kernel_initializer=self.init)
+            self.lstm_cell = tf.keras.layers.LSTMCell(self.num_stocks * 1)
+            self.lstm_rnn = tf.keras.layers.RNN(self.lstm_cell, return_state=True)
+            self.fp2 = tf.keras.layers.Dense(self.num_stocks * self.output_size)
+            self._output_reshape = tf.keras.layers.Reshape([self.output_steps, self.num_stocks, self.output_size])
+
+        @tf.function
+        def warmup(self, inputs):
+            inputs = self.input_reshape(inputs)
+            inputs = self.fp1(inputs)
+            x, *state = self.lstm_rnn(inputs)
+            prediction = self.fp2(x)
+            return prediction, state
+
+        @tf.function
+        def call(self, inputs, training=None):
+            predictions = []
+            prediction, state = self.warmup(inputs)
+
+            predictions.append(prediction)
+
+            for n in range(1, self.output_steps):
+                x = prediction
+                x, state = self.lstm_cell(x, states=state, training=training)
+                prediction = self.fp2(x)
+                predictions.append(prediction)
+
+            predictions = tf.stack(predictions)
+            predictions = tf.transpose(predictions, [1, 0, 2])
+            return self._output_reshape(predictions)
+
+    def __init__(self, encoded_size, output_size, num_stocks, win_size,
+                 output_steps):
+        self.num_stocks = num_stocks
+        self.output_steps = output_steps
+        self.init = tf.keras.initializers.GlorotNormal()
+        super().__init__(encoded_size, input_shape=(output_steps, num_stocks),
+                         output_shape=(output_size, 1))
+        self._define_beta_layers(output_size, num_stocks, win_size, output_steps)
+
+    def _define_beta_layers(self, output_size, num_stocks, win_size, output_steps):
+
+        # None, win, stocks, features
+
+        self._beta_layers = self.MyLSTMAutoRegressor(output_size, num_stocks, win_size, output_steps)
+
+        # None, steps, stocks, K
+
+        pass
+
+    def _define_encoder(self):
+        self._define_prior()
+        self._encoder = tf.keras.Sequential([
+            tf.keras.layers.InputLayer(input_shape=self._input_shape),
+            tf.keras.layers.Conv1D(self._base_depth, 5, padding='same', activation=tf.nn.leaky_relu,
+                                   kernel_initializer=self.init),
+            tf.keras.layers.Conv1D(2 * self._base_depth, 5, padding='same', activation=tf.nn.leaky_relu),
+            tf.keras.layers.Conv1D(4 * self._base_depth, 7, padding='same', activation=tf.nn.leaky_relu),
+            tf.keras.layers.Flatten(),
+            tf.keras.layers.Dense(tfp.layers.IndependentNormal.params_size(
+                self._encoded_size * self.output_steps)
+            ),
+            tfp.layers.IndependentNormal(self._encoded_size * self.output_steps)
+        ])
+        pass
+
+    def _define_decoder(self):
+        self._decoder = tf.keras.Sequential([
+            tf.keras.layers.InputLayer(input_shape=[self._encoded_size * self.output_steps]),
+            tf.keras.layers.Reshape([self.output_steps, -1]),
+            tf.keras.layers.Conv1DTranspose(4 * self._base_depth, 7, padding='same', activation=tf.nn.leaky_relu),
+            tf.keras.layers.Conv1DTranspose(2 * self._base_depth, 5, padding='same', activation=tf.nn.leaky_relu
+                                            ),
+            tf.keras.layers.Conv1DTranspose(self._base_depth, 5, padding='same', activation=tf.nn.leaky_relu
+                                            ),
+            tf.keras.layers.Dense(tfp.layers.IndependentNormal.params_size(self._output_shape)
+                                  ),
+            tfp.layers.IndependentNormal(self._output_shape)
+        ])
+        pass
+
+    def _define_prior(self):
+        self._prior = tfp.distributions.Independent(tfp.distributions.Normal(
+            loc=tf.zeros(self._encoded_size * self.output_steps), scale=1),
+            reinterpreted_batch_ndims=1)
+
+        pass
+
+    @tf.function
+    def call(self, inputs, training=None):
+        X = inputs[0]
+        y = inputs[1]
+        # tf.print(tf.shape(X))
+        if training:
+            beta = self._beta_layers(X)
+            y = tf.keras.layers.Reshape([self.output_steps, -1])(y)
+            f = self._encoder(y)
+            f = self._decoder(f)
+            pred = beta @ f
+        else:
+            beta = self._beta_layers(X)
+            Z = self._prior.sample(tf.shape(X)[0])
+            f = self._decoder(Z)
+            pred = beta @ f
+        return pred
+
+    @tf.function
     def predict(self, X):
         beta = self._beta_layers(X)
         Z = self._prior.sample(tf.shape(X)[0])

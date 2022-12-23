@@ -3,6 +3,8 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 import tensorflow as tf
 import copy
+from collections import Generator
+from utils import TfDataset
 
 
 class Data(ABC):
@@ -147,6 +149,7 @@ class GeneratedData(Data, ABC):
     _test_indexes = None
 
     def __init__(self) -> None:
+        self.tf_dataset = TfDataset()
         super().__init__()
         pass
 
@@ -162,11 +165,10 @@ class GeneratedData(Data, ABC):
         print("X_valid shape: " + str(self._X_val.shape))
         print("y_valid shape: " + str(self._y_val.shape))
 
-    @classmethod
-    def _generator_wrapper(cls, X, y):
-        y_copy = copy.deepcopy(y)
+    def _generator_wrapper(self, X, y):
 
-        def gen():
+        """
+                def gen():
             X.reset()
             y_copy.reset()
             y.reset()
@@ -175,15 +177,40 @@ class GeneratedData(Data, ABC):
                     yield (X(), y_copy()), y()
                 except StopIteration:
                     break
+        """
+        class gen(Generator):
+            def __init__(self, X, y):
+                self.X = X
+                self.y = y
+                pass
 
-        data = tf.data.Dataset.from_generator(
-            gen,
-            output_types=((tf.float32, tf.float32), tf.float32),
+            def __call__(self, *args, **kwargs):
+                self.X.reset()
+                self.y.reset()
+                return self
+
+            def send(self, ignore_arg):
+                try:
+                    return next(self.X), next(self.y)
+                except StopIteration:
+                    self.throw()
+
+            def throw(self, type=None, value=None, traceback=None):
+                raise StopIteration
+
+        data = self.tf_dataset.from_generator(
+            gen(X, y),
+            output_types=(tf.float64, tf.float64),
             output_shapes=(
-                ((None, *X.shape[1:]), (None, *y.shape[1:])),
-                (None, *y.shape[1:]))
+                (None, *X.shape[1:]),
+                (None, *y.shape[1:])
+            )
         )
         return data
+
+    def clean_tf_dataset(self):
+        self.tf_dataset.cleanup()
+        pass
 
     @abstractmethod
     def generate(self, *args):

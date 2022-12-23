@@ -61,6 +61,33 @@ class DiskData(InMemoryData):
         pass
 
 
+class DiskDataTest(GeneratedData):
+    def __init__(self, path) -> None:
+        super().__init__()
+        self.generate(path)
+        pass
+
+    def log(self):
+        print('X_test shape:' + str(self._X_test.shape))
+        print('ids_test shape: ' + str(self._ids_test.shape))
+
+    def generate(self, path):
+        d = np.load(path, allow_pickle=True)
+        X = d['x']
+        ids = d['ids']
+        self._X_test = X
+        self._ids_test = ids
+        pass
+
+    @property
+    def X_test(self):
+        return self._X_test
+
+    @property
+    def ids_test(self):
+        return self._ids_test
+
+
 '''
 Decorators
 '''
@@ -281,6 +308,13 @@ class FirstDimensionReshaperOnWindowed(FirstDimensionReshaper):
         return np.transpose(data, (0, 2, 1, 3))
 
 
+class SpecialXConverter(PostSplitDataDecorator):
+    def post_split_data_process(self):
+        self._X_train = copy.deepcopy(self._y_train)
+        self._X_val = copy.deepcopy(self._y_val)
+        self._X_test = copy.deepcopy(self._y_test)
+
+
 class TestDataHandlerOnFirstDimensionAsRecord(PostSplitDataDecorator):
 
     def post_split_data_process(self):
@@ -297,3 +331,10 @@ class TestDataHandlerOnFirstDimensionAsDate(PostSplitDataDecorator):
         self._ids_test = np.transpose(self._ids_test, (1, 0, 2))
         self._ids_test = np.reshape(self._ids_test, (-1, self._ids_test.shape[-1]))
         pass
+
+
+class SpecialTrainDataWrapper(PostSplitDataDecorator):
+
+    def post_split_data_process(self):
+        pass
+

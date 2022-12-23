@@ -177,7 +177,7 @@ class LongMarketPortfolio(LongPortfolio):
         df[['Date', 'Ticker', 'Close', 'Return', 'Market Return']] = pd.DataFrame(data.ids_test)
         daily_returns = df[['Date', 'Market Return']].drop_duplicates(
         ).set_index('Date').rename(columns={'Market Return': 'Return'})
-        self._performance.update(daily_returns)
+        self._performance.update(daily_returns['Return'])
         period = df['Date'].values
         self._scheme[period[0] + '-' + period[-1]] = {
             'long': ['Market Portfolio'],
@@ -195,6 +195,15 @@ class LongRandomPortfolio(LongPortfolio):
         count = pd.DataFrame(t).reset_index().groupby(1)['index'].count()
         stock_list = count[count == count.max()].index
         return [np.random.choice(stock_list)], [1], [], []
+
+
+class LongRandomTenPercentPortfolio(LongPortfolio):
+    def _strategy(self, data, model):
+        t = data.ids_test
+        count = pd.DataFrame(t).reset_index().groupby(1)['index'].count()
+        stock_list = count[count == count.max()].index
+        num = int(len(stock_list) * 0.1)
+        return np.random.choice(stock_list, num), [1] * num, [], []
 
 
 class LongBestPortfolio(LongPortfolio):
@@ -217,6 +226,17 @@ class LongBestThreePortfolio(LongPortfolio):
         return long_stocks, [1, 1, 1], [], []
 
 
+class LongBestTenPercentPortfolio(LongPortfolio):
+    def _strategy(self, data, model):
+        stock_list = np.unique(data.ids_test[:, 1])
+        num = int(len(stock_list) * 0.1)
+        pred = model.predict(data.X_test)[:, :, 0]
+        pred_df = pd.DataFrame(pred).T
+        pred_df.columns = stock_list
+        long_stocks = pred_df.loc[:30, :].mean().sort_values(ascending=False).index[:num]
+        return long_stocks, [1] * num, [], []
+
+
 class DollarNeutralLongShortPortfolio(AlgoTradePortfolio):
     _long_performance = None
     _short_performance = None
@@ -229,6 +249,8 @@ class DollarNeutralLongShortPortfolio(AlgoTradePortfolio):
     def _apply_strategy(self, long_stocks, long_weights, short_stocks, short_weights, period, df):
         if sum(long_weights) != 1:
             long_weights = (np.array(long_weights) / sum(long_weights)).tolist()
+        if sum(short_weights) != 1:
+            short_weights = (np.array(short_weights) / sum(short_weights)).tolist()
         daily_prices = pd.DataFrame([], index=period)
         daily_prices['long'] = 0
         daily_prices['short'] = 0
@@ -307,12 +329,6 @@ class DollarNeutralLongShortPortfolio(AlgoTradePortfolio):
 
 class LongShortBestShotPortfolio(DollarNeutralLongShortPortfolio):
     def _strategy(self, data, model):
-        """
-        t = data.ids_test
-        first_indexes = pd.DataFrame(t).reset_index().groupby(1)['index'].min()
-        count = pd.DataFrame(t).reset_index().groupby(1)['index'].count()
-        first_indexes = first_indexes.drop(count[count != count.max()].index)
-        """
         stock_list = np.unique(data.ids_test[:, 1])
         pred = model.predict(data.X_test)[:, :, 0]
         pred_df = pd.DataFrame(pred).T
@@ -321,3 +337,24 @@ class LongShortBestShotPortfolio(DollarNeutralLongShortPortfolio):
         short_stocks = stock_list[pred_df.loc[:30, :].mean().argmin()]
         return [long_stocks], [1], [short_stocks], [1]
 
+
+class LongShortBestTenPercentPortfolio(DollarNeutralLongShortPortfolio):
+    def _strategy(self, data, model):
+        stock_list = np.unique(data.ids_test[:, 1])
+        num = int(len(stock_list) * 0.1)
+        pred = model.predict(data.X_test)[:, :, 0]
+        pred_df = pd.DataFrame(pred).T
+        pred_df.columns = stock_list
+        long_stocks = pred_df.loc[:30, :].mean().sort_values(ascending=False).index[:num]
+        short_stocks = pred_df.loc[:30, :].mean().sort_values(ascending=True).index[:num]
+        return long_stocks, [1] * num, short_stocks, [1] * num
+
+
+class LongShortRandomTenPercentPortfolio(DollarNeutralLongShortPortfolio):
+    def _strategy(self, data, model):
+        t = data.ids_test
+        count = pd.DataFrame(t).reset_index().groupby(1)['index'].count()
+        stock_list = count[count == count.max()].index
+        num = int(len(stock_list) * 0.1)
+        return np.random.choice(stock_list, num).tolist(), [1] * num, np.random.choice(
+            stock_list, num).tolist(), [1] * num

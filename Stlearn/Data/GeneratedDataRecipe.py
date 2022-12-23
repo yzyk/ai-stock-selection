@@ -74,6 +74,33 @@ class DiskData(GeneratedData):
         pass
 
 
+class DiskDataTest(GeneratedData):
+    def __init__(self, path) -> None:
+        super().__init__()
+        self.generate(path, allow_pickle=True)
+        pass
+
+    def log(self):
+        print('X_test shape:' + str(self._X_test.shape))
+        print('ids_test shape: ' + str(self._ids_test.shape))
+
+    def generate(self, path):
+        d = np.load(path)
+        X = d['x']
+        ids = d['ids']
+        self._X_test = X
+        self._ids_test = ids
+        pass
+
+    @property
+    def X_test(self):
+        return self._X_test
+
+    @property
+    def ids_test(self):
+        return self._ids_test
+
+
 '''
 Decorators
 '''
@@ -138,8 +165,6 @@ class PreSplitDataDecorator(DataDecorator, ABC):
 
 
 class WindowGenerator(PreSplitDataDecorator):
-    _forward_steps_size = None
-    _data_window_size = None
 
     def __init__(self, data, data_win_size, forward_steps_size):
         self._data_window_size = data_win_size
@@ -178,6 +203,7 @@ class WindowGenerator(PreSplitDataDecorator):
 
         """
         """
+
         def pre_split_X_func(data, memory_data_index_range, cur_indexes_on_memory_data_index, steps):
             indexes = memory_data_index_range[
                 cur_indexes_on_memory_data_index
@@ -441,15 +467,18 @@ class FirstDimensionReshaperOnWindowed(FirstDimensionReshaper):
         self._ids_test.update_indexes(first_tests)
 
         self._X_train.update_shape((num_days_train, Constant.WIN_SIZE, Constant.NUM_STOCKS, self._X_train.shape[-1]))
-        self._y_train.update_shape((num_days_train, Constant.FORWARD_STEPS_SIZE, Constant.NUM_STOCKS, self._y_train.shape[-1]))
+        self._y_train.update_shape(
+            (num_days_train, Constant.FORWARD_STEPS_SIZE, Constant.NUM_STOCKS, self._y_train.shape[-1]))
         self._ids_train.update_shape((num_days_train, Constant.NUM_STOCKS, self._ids_train.shape[-1]))
 
         self._X_val.update_shape((num_days_val, Constant.WIN_SIZE, Constant.NUM_STOCKS, self._X_val.shape[-1]))
-        self._y_val.update_shape((num_days_val, Constant.FORWARD_STEPS_SIZE, Constant.NUM_STOCKS, self._y_val.shape[-1]))
+        self._y_val.update_shape(
+            (num_days_val, Constant.FORWARD_STEPS_SIZE, Constant.NUM_STOCKS, self._y_val.shape[-1]))
         self._ids_val.update_shape((num_days_val, Constant.NUM_STOCKS, self._ids_val.shape[-1]))
 
         self._X_test.update_shape((num_days_test, Constant.WIN_SIZE, Constant.NUM_STOCKS, self._X_test.shape[-1]))
-        self._y_test.update_shape((num_days_test, Constant.FORWARD_STEPS_SIZE, Constant.NUM_STOCKS, self._y_test.shape[-1]))
+        self._y_test.update_shape(
+            (num_days_test, Constant.FORWARD_STEPS_SIZE, Constant.NUM_STOCKS, self._y_test.shape[-1]))
         self._ids_test.update_shape((num_days_test, Constant.NUM_STOCKS, self._ids_test.shape[-1]))
 
         pass
@@ -460,10 +489,16 @@ class FirstDimensionReshaperOnWindowed(FirstDimensionReshaper):
         return np.transpose(data, (0, 2, 1, 3))
 
 
+class SpecialXConverter(PostSplitDataDecorator):
+    def post_split_data_process(self):
+        self._X_train = copy.deepcopy(self._y_train)
+        self._X_val = copy.deepcopy(self._y_val)
+        self._X_test = copy.deepcopy(self._y_test)
+
+
 class TestDataHandlerOnFirstDimensionAsRecord(PostSplitDataDecorator):
 
     def post_split_data_process(self):
-
         num_days_test = len(self._X_test.memory_data_index_range) / Constant.NUM_STOCKS
         first_tests = [int(i * num_days_test) for i in range(Constant.NUM_STOCKS)]
         self._X_test.update_indexes(first_tests)
@@ -486,3 +521,55 @@ class TestDataHandlerOnFirstDimensionAsDate(PostSplitDataDecorator):
         self._ids_test.clear_ops_funcs()
         self._ids_test.update_indexes(list(range(self._ids_test.batch_size)))
         self._ids_test.update_shape((self._ids_test.shape[0] * self._ids_test.shape[1], self._ids_test.shape[-1]))
+
+
+class SpecialTrainDataWrapper(PostSplitDataDecorator):
+
+    def _generator_wrapper(self, X, y):
+        y_copy = copy.deepcopy(y)
+
+        """
+                def gen():
+            X.reset()
+            y_copy.reset()
+            y.reset()
+            while 1:
+                try:
+                    yield (X(), y_copy()), y()
+                except StopIteration:
+                    break
+        """
+
+        class gen(Generator):
+            def __init__(self, X, y1, y2):
+                self.X = X
+                self.y1 = y1
+                self.y2 = y2
+                pass
+
+            def __call__(self, *args, **kwargs):
+                self.X.reset()
+                self.y1.reset()
+                self.y2.reset()
+                return self
+
+            def send(self, ignore_arg):
+                try:
+                    return (next(self.X), next(self.y1)), next(self.y2)
+                except StopIteration:
+                    self.throw()
+
+            def throw(self, type=None, value=None, traceback=None):
+                raise StopIteration
+
+        data = self.tf_dataset.from_generator(
+            gen(X, y_copy, y),
+            output_types=((tf.float64, tf.float64), tf.float64),
+            output_shapes=(
+                ((None, *X.shape[1:]), (None, *y.shape[1:])),
+                (None, *y.shape[1:]))
+        )
+        return data
+
+    def post_split_data_process(self):
+        pass

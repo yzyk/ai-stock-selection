@@ -76,4 +76,34 @@ class FourDimWinDataByDateByWinByStockByFeatureProcessor(DataProcessor):
         data = self._module.StandardSplitProcessor(data)
         data = self._module.FirstDimensionReshaperOnWindowed(data)
         data = self._module.TestDataHandlerOnFirstDimensionAsDate(data)
+        data = self._module.SpecialTrainDataWrapper(data)
+        return data
+
+
+class FourDimWinDataByDateByWinByStockByFeatureSetXToYProcessor(DataProcessor):
+
+    def __init__(self, train_start, val_start, test_start, test_end, win_size, forward_size, generator=False, *args):
+        self._win_size = win_size
+        self._forward_size = forward_size
+        super().__init__(train_start, val_start, test_start, test_end, generator)
+
+    def _load_data(self):
+        data = self._module.DiskData(self._train_start, self._val_start, self._test_start, self._test_end)
+        data = self._module.PreSplitScaler(data)
+        data = self._module.WindowGenerator(data, self._win_size, self._forward_size)
+        data = self._module.StandardSplitProcessor(data)
+        data = self._module.FirstDimensionReshaperOnWindowed(data)
+        data = self._module.SpecialXConverter(data)
+        data = self._module.TestDataHandlerOnFirstDimensionAsDate(data)
+        return data
+
+
+class DiskDataTestProcessor(DataProcessor):
+
+    def __init__(self, path, generator=False, *args):
+        super().__init__(None, None, None, None, generator)
+        self.path = path
+
+    def _load_data(self, *args):
+        data = self._module.DiskDataTest(self.path)
         return data

@@ -6,17 +6,10 @@ from Model import *
 
 
 class StlearnFactory(ABC):
-    _data = None
-    _model = None
-
-    _train_start = None
-    _val_start = None
-    _test_start = None
-    _test_end = None
-
-    _data_window_size = None
 
     def __init__(self, train_start, val_start, test_start, test_end):
+        self._model = None
+        self._data = None
         self._train_start = train_start
         self._val_start = val_start
         self._test_start = test_start
@@ -61,7 +54,7 @@ class DlFactory(StlearnFactory):
                                                                        val_start=self._val_start,
                                                                        test_start=self._test_start,
                                                                        test_end=self._test_end,
-                                                                       win_size=self._data_window_size,
+                                                                       win_size=self._window_size,
                                                                        forward_size=self._forward_size,
                                                                        generator=self._generator).load_data()
         pass
@@ -136,11 +129,14 @@ class CNNAutoRegressorFactory(DlFactory):
 class StandardVariationAutoEncoderFactory(DlFactory):
 
     def _load(self):
-        self._data = ThreeDimUnWinDataByDateByStockByFeatureProcessor(train_start=self._train_start,
-                                                                      val_start=self._val_start,
-                                                                      test_start=self._test_start,
-                                                                      test_end=self._test_end).load_data()
-        self._model = StandardVariationAutoEncoderModel('VAE')
+        self._data = FourDimWinDataByDateByWinByStockByFeatureSetXToYProcessor(train_start=self._train_start,
+                                                                               val_start=self._val_start,
+                                                                               test_start=self._test_start,
+                                                                               test_end=self._test_end,
+                                                                               win_size=self._window_size,
+                                                                               forward_size=self._forward_size,
+                                                                               generator=self._generator).load_data()
+        self._model = StandardVariationAutoEncoderModel('AE', num_stocks=Constant.NUM_STOCKS)
         pass
 
 
@@ -154,5 +150,5 @@ class ConditionalVariationAutoEncoderFactory(DlFactory):
                                                                         win_size=self._window_size,
                                                                         forward_size=self._forward_size,
                                                                         generator=self._generator).load_data()
-        self._model = ConditionalVariationAutoEncoderModel('VAE')
+        self._model = ConditionalVariationAutoEncoderGraphModel('VAE', num_stocks=Constant.NUM_STOCKS)
         pass

@@ -11,7 +11,7 @@ except:
 if IN_COLAB:
     PATH = '/content/drive/MyDrive/capstone/Deliverable/project'
 else:
-    PATH = ".."
+    PATH = "."
 
 DATA_PATH = PATH + "/data/data.parquet.gzip"
 
@@ -31,9 +31,9 @@ WIN_SIZE = 30
 
 FORWARD_STEPS_SIZE = 15
 
-MAX_EPOCHS = 1
+MAX_EPOCHS = 10
 
-BATCH_SIZE = 64
+BATCH_SIZE = 256
 
 STOCK_LIST = None
 

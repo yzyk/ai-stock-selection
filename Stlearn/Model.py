@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import Constant
 from Zoo import *
 from sklearn.linear_model import LinearRegression
 from sklearn.ensemble import RandomForestRegressor, AdaBoostRegressor, GradientBoostingRegressor
 from utils import *
 import matplotlib.pyplot as plt
+import json
 
 
 class Model(ABC):
@@ -36,6 +38,10 @@ class Model(ABC):
     @abstractmethod
     def info(self) -> None:
         pass
+
+    @property
+    def name(self):
+        return self._name
 
 
 class MlModel(Model):
@@ -73,14 +79,22 @@ class DlModel(Model):
     _input_shape = None
 
     def __init__(self,
-                 name, optimizer='rmsprop', loss=Constant.ERROR, metric=Constant.ERROR,
+                 name, loss=Constant.ERROR, metric=Constant.ERROR,
                  weighted_metric=Constant.ERROR) -> None:
         self._input_shape = (Constant.WIN_SIZE, Constant.NUM_FEATURES)
         super().__init__(name)
         self._model.compile(
-            optimizer=tf.keras.optimizers.Adam(learning_rate=1e-3), loss=Constant.ERROR, metrics=[Constant.ERROR],
-            weighted_metrics=[Constant.ERROR])
+            optimizer=tf.keras.optimizers.Adam(learning_rate=1e-3), loss=loss, metrics=[metric],
+            weighted_metrics=[weighted_metric])
         pass
+
+    def get_config(self):
+        res = {
+            'name': self._name,
+            'loss': Constant.ERROR,
+            'weighted_metric': Constant.ERROR
+        }
+        return res
 
     @abstractmethod
     def _create_model(self):
@@ -90,14 +104,36 @@ class DlModel(Model):
         data_train = data.get_train()
         data_val = data.get_val()
         if type(data_train) is not tuple:
-            data_train = (data_train, None)
-        history_ = self._model.fit(*data_train,
-                                   epochs=Constant.MAX_EPOCHS,
-                                   validation_data=data_val
-                                   )
+            X_train = data_train
+            y_train = None
+        else:
+            X_train, y_train = data_train
+        self._history = self._model.fit(X_train, y_train,
+                                        epochs=Constant.MAX_EPOCHS,
+                                        validation_data=data_val,
+                                        callbacks=[GarbageCollectorCallback()]
+                                        )
         fig, axs = plt.subplots(1, 2, figsize=(24, 10))
-        self._plot_train(history=history_, axs=axs)
+        self._plot_train(history=self._history, axs=axs)
         pass
+
+    def save(self, dir_path):
+        self._model.save_weights(dir_path + '/weights')
+        with open(dir_path + '/config.json', 'w') as f:
+            json.dump(self.get_config(), f)
+        with open(dir_path + '/metric.json', 'w') as f:
+            json.dump(self._history.history, f)
+        pass
+
+    @classmethod
+    def load(cls, dir_path):
+        with open(dir_path + '/config.json') as f:
+            config = json.load(f)
+        with open(dir_path + '/metric.json') as f:
+            metric = json.load(f)
+        model = cls(**config)
+        model._model.load_weights(dir_path + '/weights')
+        return model, metric
 
     def predict(self, X):
         pred = self._model.predict(X)
@@ -216,10 +252,10 @@ class CNNModel(DlModel):
             tf.keras.layers.MaxPooling1D(pool_size=(2,)),
             tf.keras.layers.Flatten(),
             tf.keras.layers.Dropout(0.5),
-            tf.keras.layers.Dense(30,
+            tf.keras.layers.Dense(Constant.FORWARD_STEPS_SIZE,
                                   kernel_initializer=tf.initializers.zeros()),
             # Shape => [batch, out_steps, features].
-            tf.keras.layers.Reshape([30, 1])
+            tf.keras.layers.Reshape([Constant.FORWARD_STEPS_SIZE, 1])
         ])
         pass
 
@@ -229,9 +265,10 @@ class LSTMModel(DlModel):
     def _create_model(self):
         self._model = tf.keras.Sequential([
             tf.keras.layers.LSTM(16, return_sequences=True, input_shape=self._input_shape),
-            # tf.keras.layers.Flatten(),
-            tf.keras.layers.LSTM(1, return_sequences=True)
-            # tf.keras.layers.Dense(1, name='dense_head')
+            tf.keras.layers.Flatten(),
+            tf.keras.layers.Dense(Constant.FORWARD_STEPS_SIZE),
+            # Shape => [batch, out_steps, features].
+            tf.keras.layers.Reshape([Constant.FORWARD_STEPS_SIZE, 1])
         ])
         pass
 
@@ -250,55 +287,49 @@ class CNNAutoRegressorModel(DlModel):
 
 
 class StandardVariationAutoEncoderModel(DlModel):
-    def __init__(self, name):
-        negloglik = lambda x, rv_x: -rv_x.log_prob(x)
-        super().__init__(name)
+    def __init__(self, name, loss=Constant.ERROR, metric=Constant.ERROR,
+                 weighted_metric=Constant.ERROR, num_stocks=Constant.NUM_STOCKS,
+                 output_steps=Constant.FORWARD_STEPS_SIZE
+                 ):
+        self.num_stocks = num_stocks
+        self.output_steps = output_steps
+        super().__init__(name, loss, metric, weighted_metric)
         pass
 
     def _create_model(self):
-        self._model = StandardVariationalAutoEncoder(30, input_shape=(Constant.NUM_STOCKS, 1))
-        pass
-
-    def fit(self, data):
-        X_train, y_train = data.get_train()
-        X_val, y_val = data.get_val()
-        history_ = self._model.fit(y_train, y_train,
-                                   epochs=Constant.MAX_EPOCHS,
-                                   validation_data=(y_val, y_val),
-                                   callbacks=[], verbose=2
-                                   )
-        fig, axs = plt.subplots(1, 2, figsize=(24, 10))
-        self._plot_train(history=history_, axs=axs)
+        self._model = StandardVariationalAutoEncoder(30, input_shape=(self.output_steps, self.num_stocks, 1))
         pass
 
     def predict(self, X=None):
-        pred = self._model.predict(X, Constant.FORWARD_STEPS_SIZE)
-        return pred.numpy()[:, :, 0].T[:, :, np.newaxis]
+        pred = self._model.predict(X)
+        pred = tf.transpose(tf.squeeze(pred))
+        pred = tf.expand_dims(pred, axis=-1)
+        return pred.numpy()
 
-    def info_encoder(self):
-        tf.keras.utils.plot_model(
-            self._model._encoder, to_file=Constant.MODEL_IMAGE_PATH + '/' + self._name + '.png', show_shapes=True,
-            dpi=100
-        )
-        print("Parameters number in model: ", self._model.count_params())
-        return IPython.display.Image(Constant.MODEL_IMAGE_PATH + '/' + self._name + '.png')
-
-    def info_decoder(self):
-        tf.keras.utils.plot_model(
-            self._model._decoder, to_file=Constant.MODEL_IMAGE_PATH + '/' + self._name + '.png', show_shapes=True,
-            dpi=100
-        )
-        print("Parameters number in model: ", self._model.count_params())
-        return IPython.display.Image(Constant.MODEL_IMAGE_PATH + '/' + self._name + '.png')
+    def get_config(self):
+        config = super().get_config()
+        config['num_stocks'] = self.num_stocks
+        config['output_steps'] = self.output_steps
+        return config
 
 
 class ConditionalVariationAutoEncoderModel(DlModel):
 
-    def __init__(self, name):
-        super().__init__(name)
+    def __init__(self, name, loss=Constant.ERROR, metric=Constant.ERROR,
+                 weighted_metric=Constant.ERROR, num_stocks=Constant.NUM_STOCKS,
+                 win_size=Constant.WIN_SIZE,
+                 output_steps=Constant.FORWARD_STEPS_SIZE
+                 ):
+        self.num_stocks = num_stocks
+        self.win_size = win_size
+        self.output_steps = output_steps
+        super().__init__(name, loss, metric, weighted_metric)
 
     def _create_model(self):
-        self._model = ConditionalVariationalAutoEncoder()
+        self._model = ConditionalVariationalAutoEncoder(encoded_size=15, output_size=30,
+                                                        num_stocks=self.num_stocks,
+                                                        win_size=self.win_size,
+                                                        output_steps=self.output_steps)
         pass
 
     def predict(self, X=None):
@@ -318,3 +349,55 @@ class ConditionalVariationAutoEncoderModel(DlModel):
             n=self._name, l=score_[0])
         )
         pass
+
+    def get_config(self):
+        config = super().get_config()
+        config['num_stocks'] = self.num_stocks
+        config['win_size'] = self.win_size
+        config['output_steps'] = self.output_steps
+        return config
+
+
+class ConditionalVariationAutoEncoderGraphModel(DlModel):
+
+    def __init__(self, name, loss=Constant.ERROR, metric=Constant.ERROR,
+                 weighted_metric=Constant.ERROR, num_stocks=Constant.NUM_STOCKS,
+                 win_size=Constant.WIN_SIZE,
+                 output_steps=Constant.FORWARD_STEPS_SIZE
+                 ):
+        self.num_stocks = num_stocks
+        self.win_size = win_size
+        self.output_steps = output_steps
+        super().__init__(name, loss, metric, weighted_metric)
+
+    def _create_model(self):
+        self._model = ConditionalVariationalAutoEncoderGraph(encoded_size=15, output_size=30,
+                                                             num_stocks=self.num_stocks,
+                                                             win_size=self.win_size,
+                                                             output_steps=self.output_steps)
+        pass
+
+    def predict(self, X=None):
+        pred = self._model.predict(X)
+        pred = tf.transpose(tf.squeeze(pred))
+        pred = tf.expand_dims(pred, axis=-1)
+        return pred.numpy()
+
+    def evaluate(self, data, s) -> None:
+        data_test = None
+        if s == 'val':
+            data_test = data.get_val()
+        if s == 'test':
+            data_test = data.get_test()
+        score_ = self._model.evaluate(data_test)
+        print("{n:s}: Test loss: {l:3.5f}".format(
+            n=self._name, l=score_[0])
+        )
+        pass
+
+    def get_config(self):
+        config = super().get_config()
+        config['num_stocks'] = self.num_stocks
+        config['win_size'] = self.win_size
+        config['output_steps'] = self.output_steps
+        return config
