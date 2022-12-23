@@ -28,7 +28,7 @@ This is a more Java concepts. Here in python by interface, we define an abstract
 ```python
 class Data(ABC):
 
-    def __init__(self) -> None:
+    def __init__(self):
         pass
 
     @abstractmethod
